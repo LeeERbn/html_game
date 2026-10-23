@@ -1,0 +1,1951 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>恶魔轮盘</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: #0a0806;
+    overflow: hidden; user-select: none; touch-action: none;
+    color: #e8dcc8;
+  }
+  #c { position: fixed; inset: 0; display: block; }
+
+  /* ---------- 顶部 HUD ---------- */
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: flex-start; justify-content: space-between;
+    padding: 14px 16px; pointer-events: none;
+  }
+  .hp-box { min-width: 96px; }
+  .hp-box.you { text-align: left; }
+  .hp-box.ai  { text-align: right; }
+  .hp-label { font-size: 11px; letter-spacing: 2px; color: #a8916f; margin-bottom: 4px; }
+  .hearts { display: flex; gap: 4px; }
+  .hp-box.you .hearts { justify-content: flex-start; }
+  .hp-box.ai  .hearts { justify-content: flex-end; }
+  .heart {
+    width: 20px; height: 20px; font-size: 15px; line-height: 20px; text-align: center;
+    filter: drop-shadow(0 0 4px rgba(255,60,60,.7)); transition: all .25s;
+  }
+  .heart.lost { filter: grayscale(1) opacity(.25); transform: scale(.85); }
+
+  /* 中间回合/子弹提示 */
+  #centerInfo {
+    position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+    z-index: 10; text-align: center; pointer-events: none;
+  }
+  #roundTag {
+    font-size: 12px; letter-spacing: 3px; color: #a8916f;
+  }
+  #scoreTag {
+    font-size: 13px; letter-spacing: 2px; color: #ffd76b; margin-top: 3px; font-weight: 700;
+  }
+  #bulletRow { display: flex; gap: 5px; justify-content: center; margin-top: 6px; }
+  #knownInfo { font-size: 11px; color: #e2bf75; margin-top: 4px; min-height: 14px; }
+  #aiItems { display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; max-width: 145px; margin-top: 6px; }
+  #aiItems span { font-size: 11px; color: #c9b897; background: rgba(30,26,22,.85); border: 1px solid #4a3f30; border-radius: 5px; padding: 2px 4px; }
+  .bullet {
+    width: 14px; height: 22px; border-radius: 3px; font-size: 10px; line-height: 22px;
+    text-align: center; border: 1px solid rgba(255,255,255,.25); font-weight: 800;
+    transition: all .2s;
+  }
+  .bullet.live { background: #d43a2e; color: #fff; box-shadow: 0 0 6px rgba(255,60,40,.8); }
+  .bullet.blank{ background: #3a3a44; color: #888; }
+  .bullet.fired { opacity: .18; transform: scale(.8); }
+  .bullet.next { outline: 2px solid #ffd76b; outline-offset: 1px; }
+
+  /* 装弹展示浮层 */
+  #loadPanel {
+    position: fixed; inset: 0; z-index: 25; display: none;
+    align-items: center; justify-content: center; background: rgba(0,0,0,.6);
+    pointer-events: none;
+  }
+  #loadPanel.show { display: flex; }
+  #loadBox {
+    text-align: center; background: rgba(20,16,12,.92);
+    border: 2px solid #4a3f30; border-radius: 18px; padding: 26px 34px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.6);
+  }
+  #loadBox .t { font-size: 18px; letter-spacing: 3px; color: #ffd76b; margin-bottom: 16px; }
+  #loadBullets { display: flex; gap: 8px; justify-content: center; margin-bottom: 12px; }
+  #loadBullets .lb {
+    width: 26px; height: 40px; border-radius: 5px; font-size: 16px; line-height: 40px;
+    text-align: center; font-weight: 900; border: 1px solid rgba(255,255,255,.3);
+  }
+  #loadBullets .lb.live { background: #d43a2e; color: #fff; }
+  #loadBullets .lb.blank{ background: #3a3a44; color: #999; }
+  #loadBullets .lb.pop { animation: lbPop .3s ease; }
+  @keyframes lbPop {
+    0% { transform: scale(.4); opacity: 0; }
+    60% { transform: scale(1.2); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  #loadBox .s { font-size: 12px; color: #a8916f; letter-spacing: 2px; }
+  #loadBox .hideHint { margin-top: 10px; font-size: 12px; color: #7a6a50; letter-spacing: 1px; }
+
+  /* 静音按钮 */
+  #muteBtn {
+    position: fixed; right: 16px; bottom: 18px; z-index: 10;
+    width: 42px; height: 42px; border-radius: 50%;
+    background: rgba(30,26,22,.85); border: 2px solid #4a3f30;
+    font-size: 20px; cursor: pointer; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .12s;
+  }
+  #muteBtn:hover { border-color: #c9a55c; }
+  #muteBtn.off { filter: grayscale(1) opacity(.55); }
+
+  /* ---------- 底部道具栏 ---------- */
+  #items {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    z-index: 10; display: flex; gap: 10px; pointer-events: auto;
+    flex-wrap: wrap; justify-content: center; max-width: 92vw;
+  }
+  .item {
+    position: relative; width: 60px; height: 60px; border-radius: 14px;
+    background: rgba(30,26,22,.85); border: 2px solid #4a3f30;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; transition: all .12s;
+    box-shadow: 0 4px 12px rgba(0,0,0,.5);
+  }
+  .item .ic { font-size: 28px; line-height: 1; }
+  .item .nm { font-size: 10px; color: #c9b897; margin-top: 3px; letter-spacing: 1px; }
+  .item .cnt {
+    position: absolute; top: -7px; right: -7px; min-width: 20px; height: 20px;
+    background: #b8382e; color: #fff; border-radius: 10px; font-size: 12px;
+    line-height: 20px; text-align: center; padding: 0 5px; font-weight: 800;
+  }
+  .item:hover { transform: translateY(-3px); border-color: #c9a55c; }
+  .item:active { transform: translateY(0) scale(.95); }
+  .item.disabled { filter: grayscale(1) opacity(.4); cursor: not-allowed; transform: none; }
+  .item.armed { border-color: #ffd76b; box-shadow: 0 0 14px rgba(255,200,80,.5); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{ box-shadow: 0 0 8px rgba(255,200,80,.4);} 50%{ box-shadow: 0 0 20px rgba(255,200,80,.8);} }
+
+  /* ---------- 瞄准提示 ---------- */
+  #aimHint {
+    position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%);
+    z-index: 20; display: none; align-items: center; gap: 10px;
+    background: rgba(20,16,12,.88); border: 2px solid #c9a55c; border-radius: 14px;
+    padding: 10px 20px; font-size: 14px; letter-spacing: 2px; color: #f0e6d2;
+    pointer-events: none; white-space: nowrap;
+    box-shadow: 0 6px 20px rgba(0,0,0,.5);
+    animation: aimGlow 1.2s infinite;
+  }
+  #aimHint.show { display: flex; }
+  #aimHint .sep { color: #c9a55c; }
+  @keyframes aimGlow {
+    0%,100% { box-shadow: 0 0 10px rgba(201,165,92,.3); }
+    50%     { box-shadow: 0 0 22px rgba(201,165,92,.7); }
+  }
+
+  /* ---------- 结算 ---------- */
+  #overlay {
+    position: fixed; inset: 0; z-index: 30; display: none;
+    align-items: center; justify-content: center; background: rgba(0,0,0,.75);
+    text-align: center;
+  }
+  #overlay.show { display: flex; }
+  #stealPanel {
+    position: fixed; inset: 0; z-index: 35; display: none; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.8); text-align: center;
+  }
+  #stealPanel.show { display: flex; }
+  #stealBox { max-width: 90vw; padding: 24px; background: #18120e; border: 2px solid #a88953; border-radius: 14px; }
+  #stealChoices { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 18px 0; }
+  #stealChoices button, #stealCancel, #modeSelect {
+    padding: 8px 12px; background: #30251a; border: 1px solid #a88953; border-radius: 8px;
+    color: #e8dcc8; cursor: pointer; font: inherit;
+  }
+  #stealChoices button:hover, #stealCancel:hover { background: #543c22; }
+  #overBox { }
+  #overTitle { font-size: 44px; font-weight: 900; letter-spacing: 6px; margin-bottom: 10px; }
+  #overTitle.win { color: #ffd76b; text-shadow: 0 0 20px rgba(255,200,80,.6); }
+  #overTitle.lose{ color: #c0392b; text-shadow: 0 0 20px rgba(200,40,30,.6); }
+  #overSub { font-size: 14px; color: #a8916f; margin-bottom: 26px; letter-spacing: 1px; }
+  #overBtn {
+    padding: 14px 40px; border-radius: 12px; font-size: 17px; letter-spacing: 3px;
+    cursor: pointer; background: #c9a55c; color: #1a1408; font-weight: 800; border: none;
+    box-shadow: 0 4px 16px rgba(200,160,80,.4);
+  }
+  #overBtn:hover { transform: scale(1.05); }
+
+  /* ---------- 提示浮字 ---------- */
+  #toast {
+    position: fixed; top: 34%; left: 50%; transform: translateX(-50%);
+    z-index: 15; font-size: 26px; font-weight: 900; letter-spacing: 4px;
+    pointer-events: none; opacity: 0; transition: opacity .2s; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+  #toast.red { color: #ff4a3a; text-shadow: 0 0 16px rgba(255,60,40,.8); }
+  #toast.gold{ color: #ffd76b; text-shadow: 0 0 16px rgba(255,200,80,.8); }
+
+  /* ---------- 低血血幕 ---------- */
+  #vignette {
+    position: fixed; inset: 0; z-index: 5; pointer-events: none;
+    opacity: 0; transition: opacity .4s;
+    background: radial-gradient(ellipse at center, rgba(180,0,0,0) 45%, rgba(160,10,0,.55) 100%);
+  }
+  #vignette.low { opacity: 1; animation: vgPulse 1.1s infinite; }
+  @keyframes vgPulse {
+    0%,100% { filter: brightness(1); }
+    50%     { filter: brightness(1.5); }
+  }
+  #defibOverlay {
+    position: fixed; inset: 0; z-index: 60; display: none; background: #000;
+    align-items: center; justify-content: center; color: #d8d8d8; text-align: center;
+  }
+  #defibOverlay.show { display: flex; }
+  #defibText { font-size: 14px; letter-spacing: 4px; opacity: .9; }
+  #defibPulse { width: 180px; height: 2px; margin: 18px auto 0; background: #222; overflow: hidden; }
+  #defibPulse::after { content: ''; display: block; width: 38%; height: 100%; background: #e7d18e; animation: defibScan .7s infinite linear; }
+  @keyframes defibScan { from { transform: translateX(-120px); } to { transform: translateX(220px); } }
+
+  /* ---------- 恶魔台词气泡 ---------- */
+  #speech {
+    position: fixed; top: 24%; left: 50%; transform: translateX(-50%);
+    z-index: 12; max-width: 78vw; padding: 10px 18px;
+    background: rgba(20,14,10,.9); border: 2px solid #7a1512; border-radius: 12px;
+    font-size: 15px; letter-spacing: 1px; color: #ffc9b8;
+    text-align: center; pointer-events: none; opacity: 0; transition: opacity .25s;
+    box-shadow: 0 6px 20px rgba(0,0,0,.5);
+  }
+  #speech.show { opacity: 1; }
+  #speech::after {
+    content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+    border: 8px solid transparent; border-top-color: #7a1512;
+  }
+
+  /* 开始画面 */
+  #startPanel {
+    position: fixed; inset: 0; z-index: 40; display: flex;
+    align-items: center; justify-content: center; background: rgba(8,6,4,.85);
+    text-align: center;
+  }
+  #startBox h1 { font-size: 40px; letter-spacing: 8px; color: #ffd76b; text-shadow: 0 0 24px rgba(255,200,80,.5); margin-bottom: 12px; }
+  #startBox p { font-size: 13px; color: #a8916f; line-height: 1.8; margin-bottom: 8px; }
+  #startBox .rule { text-align: left; display: inline-block; font-size: 12px; color: #b8a37f; line-height: 2; margin: 10px 0 22px; }
+  #startBox .rule { max-height: 48vh; overflow: auto; }
+  #modeSelect { margin: 4px 0 16px; }
+  #startBtn {
+    padding: 16px 52px; border-radius: 14px; font-size: 18px; letter-spacing: 4px;
+    cursor: pointer; background: #c9a55c; color: #1a1408; font-weight: 900; border: none;
+    box-shadow: 0 6px 20px rgba(200,160,80,.5);
+  }
+  #startBtn:hover { transform: scale(1.05); }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hp-box you">
+    <div class="hp-label">你</div>
+    <div class="hearts" id="heartsYou"></div>
+  </div>
+  <div class="hp-box ai">
+    <div class="hp-label">对手</div>
+    <div class="hearts" id="heartsAi"></div>
+    <div id="aiItems"></div>
+  </div>
+</div>
+
+<div id="centerInfo">
+  <div id="roundTag">第 1 轮</div>
+  <div id="scoreTag"></div>
+  <div id="bulletRow"></div>
+  <div id="knownInfo"></div>
+</div>
+
+<button id="muteBtn" title="静音">🔊</button>
+
+<div id="toast"></div>
+
+<!-- 低血屏幕泛红 + 心跳脉冲 -->
+<div id="vignette"></div>
+<div id="defibOverlay"><div><div id="defibText">生命信号中断</div><div id="defibPulse"></div></div></div>
+
+<!-- 恶魔台词气泡 -->
+<div id="speech"></div>
+
+<div id="loadPanel">
+  <div id="loadBox">
+    <div class="t">本轮装填 · 子弹构成</div>
+    <div id="loadBullets"></div>
+    <div class="s" id="loadSummary"></div>
+    <div class="hideHint">随后子弹将填入枪中，顺序对双方保密</div>
+  </div>
+</div>
+
+<div id="items"></div>
+
+<div id="aimHint">
+  <span>点击对手 = 打对手</span>
+  <span class="sep">·</span>
+  <span>点击下方 = 打自己</span>
+</div>
+
+<div id="overlay">
+  <div id="overBox">
+    <div id="overTitle"></div>
+    <div id="overSub"></div>
+    <button id="overBtn">再来一局</button>
+  </div>
+</div>
+
+<div id="startPanel">
+  <div id="startBox">
+    <h1>恶魔轮盘</h1>
+    <p>第一人称 · 3D 桌面 · 生死对决</p>
+    <div class="rule">
+      🔫 每轮装填子弹，数量随轮次递增（实弹 / 空包弹随机）<br>
+      🔍 放大镜：查看下一发子弹<br>
+      🥤 饮料：退掉当前这发子弹<br>
+      🪚 锯子：本发伤害翻倍<br>
+      💊 胶囊：恢复 1 点生命<br>
+      🔒 手铐：跳过对方下一个回合<br>
+      🔋 电池：延续锯子充能<br>
+      ☎️ 手机：随机透露剩余实弹数<br>
+      <br>
+      打自己命中空包弹 → 回合不结束，继续行动<br>
+      其余情况 → 回合结束，枪交给对方<br>
+      子弹打空后重新装填<br>
+      <br>
+      🏆 三阶段对决，先胜 2 个阶段者获胜
+    </div>
+    <select id="modeSelect" title="游戏模式">
+      <option value="classic">经典规则</option>
+      <option value="custom">扩展规则（含电池）</option>
+    </select>
+    <button id="startBtn">开始游戏</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ============================================================
+//  基础常量
+// ============================================================
+const MAX_HP = 3;
+const MAX_ITEM_SLOTS = 8;
+const STAGE_CONFIG = [
+  { hp: 3, shells: 5, items: 2 },
+  { hp: 4, shells: 6, items: 3 },
+  { hp: 5, shells: 8, items: 3 },
+];
+const CLASSIC_ITEM_POOL = ['magnifier','drink','saw','pill','handcuff','phone'];
+const CUSTOM_ITEM_POOL = [...CLASSIC_ITEM_POOL, 'battery'];
+let gameMode = 'classic';
+let ITEM_POOL = CLASSIC_ITEM_POOL;
+
+const ITEM_META = {
+  magnifier: { ic: '🔍', nm: '放大镜' },
+  drink:     { ic: '🥤', nm: '饮料' },
+  saw:       { ic: '🪚', nm: '锯子' },
+  pill:      { ic: '💊', nm: '胶囊' },
+  handcuff:  { ic: '🔒', nm: '手铐' },
+  battery:   { ic: '🔋', nm: '电池' },
+  phone:     { ic: '☎️', nm: '手机' },
+};
+
+// 每轮子弹数：随轮次递增（第 1 轮 5 发，之后逐渐增加，上限 8）
+function bulletsForRound(round) {
+  return Math.min(8, 4 + round);
+}
+
+// ============================================================
+//  音效系统（Web Audio API 合成，无需外部音频文件）
+// ============================================================
+let audioCtx = null;
+let soundOn = true;
+let heartbeatTimer = null;
+
+function ensureAudio() {
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (e) { audioCtx = null; }
+  }
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+// 通用：噪声突发
+function noiseBurst(duration, gainPeak, filterType, freq, freqEnd, gainEnd) {
+  const ctx = ensureAudio(); if (!ctx || !soundOn) return;
+  const len = Math.floor(ctx.sampleRate * duration);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const filter = ctx.createBiquadFilter();
+  filter.type = filterType; filter.frequency.setValueAtTime(freq, ctx.currentTime);
+  filter.frequency.exponentialRampToValueAtTime(Math.max(40, freqEnd), ctx.currentTime + duration);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(gainPeak, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, gainEnd), ctx.currentTime + duration);
+  src.connect(filter).connect(gain).connect(ctx.destination);
+  src.start();
+}
+
+// 单一频率音
+function tone(freq, duration, type, gainPeak, freqEnd) {
+  const ctx = ensureAudio(); if (!ctx || !soundOn) return;
+  const osc = ctx.createOscillator(); osc.type = type || 'sine';
+  osc.frequency.setValueAtTime(freq, ctx.currentTime);
+  if (freqEnd) osc.frequency.exponentialRampToValueAtTime(freqEnd, ctx.currentTime + duration);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(gainPeak, ctx.currentTime + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(); osc.stop(ctx.currentTime + duration);
+}
+
+const SFX = {
+  shoot() {  // 实弹开火：低频巨响
+    noiseBurst(0.5, 0.9, 'lowpass', 3000, 200, 0.0001);
+    tone(120, 0.4, 'sawtooth', 0.5, 40);
+    tone(60, 0.5, 'sine', 0.7, 30);
+  },
+  blank() {  // 空包弹：短促咔哒
+    noiseBurst(0.06, 0.4, 'highpass', 2000, 4000, 0.0001);
+    tone(800, 0.05, 'square', 0.2, 500);
+  },
+  load() {   // 装弹：金属碰撞（多段短噪声）
+    for (let i = 0; i < 5; i++) {
+      setTimeout(() => { noiseBurst(0.05, 0.3, 'bandpass', 1800, 2500, 0.0001); tone(2200, 0.04, 'square', 0.12, 1600); }, i * 120);
+    }
+  },
+  item() {   // 道具使用
+    tone(660, 0.12, 'triangle', 0.25, 880);
+    setTimeout(() => tone(990, 0.14, 'triangle', 0.22, 1320), 90);
+  },
+  pickGun() { // 拿起枪
+    tone(300, 0.1, 'sine', 0.2, 500);
+  },
+  heartbeat() { // 心跳：低音双跳
+    tone(50, 0.12, 'sine', 0.5, 35);
+    setTimeout(() => tone(45, 0.1, 'sine', 0.4, 30), 160);
+  },
+  pump() {
+    noiseBurst(0.12, 0.35, 'bandpass', 900, 2200, 0.0001);
+    tone(150, 0.16, 'square', 0.2, 70);
+  },
+  shell() {
+    tone(1250, 0.08, 'triangle', 0.12, 420);
+    noiseBurst(0.09, 0.18, 'highpass', 1800, 600, 0.0001);
+  },
+  defib() {
+    tone(58, 0.28, 'sawtooth', 0.35, 42);
+    setTimeout(() => tone(920, 0.08, 'square', 0.32, 1320), 300);
+    setTimeout(() => tone(920, 0.08, 'square', 0.32, 1320), 470);
+    setTimeout(() => noiseBurst(0.2, 0.3, 'bandpass', 1700, 420, 0.0001), 650);
+  },
+};
+
+function startHeartbeat() {
+  stopHeartbeat();
+  heartbeatTimer = setInterval(() => { if (state.you === 1 || state.ai === 1) SFX.heartbeat(); }, 1100);
+}
+function stopHeartbeat() {
+  if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+}
+
+// ============================================================
+//  Three.js 场景
+// ============================================================
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x0a0806, 8, 30);
+
+const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 100);
+// 第一人称：坐在桌边
+const CAM_HOME = { x: 0, y: 1.65, z: 2.3 };
+camera.position.set(CAM_HOME.x, CAM_HOME.y, CAM_HOME.z);
+
+// 灯光
+const amb = new THREE.AmbientLight(0x8a6a4a, 1.1);
+scene.add(amb);
+const key = new THREE.DirectionalLight(0xffe0b0, 2.2);
+key.position.set(3, 6, 2);
+key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
+key.shadow.camera.near = 1; key.shadow.camera.far = 30;
+key.shadow.camera.left = -8; key.shadow.camera.right = 8;
+key.shadow.camera.top = 8; key.shadow.camera.bottom = -8;
+scene.add(key);
+const rim = new THREE.PointLight(0x3366ff, 0.6, 20);
+rim.position.set(-2, 3, -2);
+scene.add(rim);
+const redBack = new THREE.PointLight(0x9e1f22, 0.75, 12);
+redBack.position.set(0, 2.6, -4.5);
+scene.add(redBack);
+
+// 地面
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(40, 40),
+  new THREE.MeshStandardMaterial({ color: 0x14100c, roughness: .9 })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// 桌子
+const tableGroup = new THREE.Group();
+function makeWoodTexture() {
+  const texCanvas = document.createElement('canvas');
+  texCanvas.width = texCanvas.height = 256;
+  const ctx = texCanvas.getContext('2d');
+  ctx.fillStyle = '#4b2b18'; ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 36; i++) {
+    ctx.strokeStyle = `rgba(190,120,62,${0.06 + Math.random() * 0.08})`;
+    ctx.lineWidth = 1 + Math.random() * 2;
+    ctx.beginPath();
+    ctx.moveTo(-20, Math.random() * 256);
+    ctx.bezierCurveTo(70, Math.random() * 256, 170, Math.random() * 256, 280, Math.random() * 256);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(texCanvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(3, 3);
+  return tex;
+}
+const woodTexture = makeWoodTexture();
+const wood = new THREE.MeshStandardMaterial({ color: 0x5b351f, map: woodTexture, roughness: .62 });
+const tableTop = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 0.14, 48), wood);
+tableTop.position.y = 0.95;
+tableTop.castShadow = tableTop.receiveShadow = true;
+tableGroup.add(tableTop);
+const tableEdge = new THREE.Mesh(
+  new THREE.TorusGeometry(2.57, 0.055, 10, 64),
+  new THREE.MeshStandardMaterial({ color: 0x24140c, roughness: .5, metalness: .12 })
+);
+tableEdge.rotation.x = Math.PI / 2;
+tableEdge.position.y = 1.02;
+tableEdge.castShadow = true;
+tableGroup.add(tableEdge);
+const legMat = new THREE.MeshStandardMaterial({ color: 0x2c1a0e, roughness: .6 });
+[[-2.2, 0.45, -1.1],[2.2,0.45,-1.1],[-2.2,0.45,1.1],[2.2,0.45,1.1]].forEach(p => {
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.9, 12), legMat);
+  leg.position.set(p[0], p[1], p[2]);
+  tableGroup.add(leg);
+});
+scene.add(tableGroup);
+
+// 桌布（红色，恶魔风格）
+const cloth = new THREE.Mesh(
+  new THREE.CylinderGeometry(2.62, 2.62, 0.02, 48),
+  new THREE.MeshStandardMaterial({ color: 0x721817, roughness: .92, metalness: 0 })
+);
+cloth.position.y = 1.02;
+cloth.receiveShadow = true;
+tableGroup.add(cloth);
+
+// ============ 枪：双管霰弹枪 ============
+const gunGroup = new THREE.Group();
+const gunMetal = new THREE.MeshStandardMaterial({ color: 0x22232a, roughness: .2, metalness: .92 });
+const gunSteel = new THREE.MeshStandardMaterial({ color: 0x51525a, roughness: .28, metalness: .82 });
+const gunWood = new THREE.MeshStandardMaterial({ color: 0x684126, map: woodTexture, roughness: .58 });
+const gunWoodDark = new THREE.MeshStandardMaterial({ color: 0x3a2415, map: woodTexture, roughness: .66 });
+
+// 双管（上下叠放，经典 12mm 双管霰弹枪），枪管朝 +X 方向
+const barrelGeo = new THREE.CylinderGeometry(0.055, 0.055, 1.5, 20);
+[0.075, -0.075].forEach(offY => {
+  const tube = new THREE.Mesh(barrelGeo, gunMetal);
+  tube.rotation.z = Math.PI / 2;
+  tube.position.set(0.35, offY, 0);
+  tube.castShadow = true;
+  gunGroup.add(tube);
+  // 枪口（管端金属环）
+  const muzzleRing = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.05, 20), gunSteel);
+  muzzleRing.rotation.z = Math.PI / 2;
+  muzzleRing.position.set(1.1, offY, 0);
+  gunGroup.add(muzzleRing);
+});
+// 枪机（后膛，连接双管与枪托）
+const breech = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.24, 0.2), gunSteel);
+breech.position.set(-0.2, 0, 0);
+breech.castShadow = true;
+gunGroup.add(breech);
+const receiverPlate = new THREE.Mesh(
+  new THREE.BoxGeometry(0.34, 0.18, 0.015),
+  new THREE.MeshStandardMaterial({ color: 0x17181e, roughness: .22, metalness: .9 })
+);
+receiverPlate.position.set(-0.18, 0, 0.108);
+gunGroup.add(receiverPlate);
+// 顶部瞄准肋条
+const rib = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.02, 0.05), gunSteel);
+rib.position.set(0.4, 0.0, 0);
+gunGroup.add(rib);
+// 护木（前托，木制）
+const forend = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.14, 0.17), gunWood);
+forend.position.set(0.65, -0.06, 0);
+forend.castShadow = true;
+gunGroup.add(forend);
+for (let i = 0; i < 5; i++) {
+  const groove = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.11, 0.185), gunWoodDark);
+  groove.position.set(0.42 + i * 0.105, -0.06, 0);
+  gunGroup.add(groove);
+}
+// 枪托（木制，斜向后下方）
+const stock = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.16, 0.15), gunWoodDark);
+stock.position.set(-0.75, -0.1, 0);
+stock.rotation.z = 0.22;
+stock.castShadow = true;
+gunGroup.add(stock);
+const buttPad = new THREE.Mesh(
+  new THREE.BoxGeometry(0.06, 0.19, 0.17),
+  new THREE.MeshStandardMaterial({ color: 0x16161b, roughness: .55, metalness: .22 })
+);
+buttPad.position.set(-1.19, -0.19, 0);
+buttPad.rotation.z = 0.22;
+gunGroup.add(buttPad);
+// 扳机护圈 + 扳机
+const triggerGuard = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.02, 10, 20), gunSteel);
+triggerGuard.rotation.y = Math.PI / 2;
+triggerGuard.position.set(-0.45, -0.16, 0);
+gunGroup.add(triggerGuard);
+const trigger = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.1, 8),
+  new THREE.MeshStandardMaterial({ color: 0x111115, roughness: .4, metalness: .6 }));
+trigger.rotation.z = Math.PI / 2;
+trigger.position.set(-0.45, -0.12, 0);
+gunGroup.add(trigger);
+
+gunGroup.position.set(0, 1.02, -0.4);
+gunGroup.rotation.y = -Math.PI / 2; // 初始枪口指向对面 AI
+gunGroup.scale.setScalar(1.0);
+scene.add(gunGroup);
+
+// 枪口火光定位点（双管前方）
+const muzzleFlash = new THREE.PointLight(0xffaa33, 0, 6);
+muzzleFlash.position.set(1.15, 0, 0);
+gunGroup.add(muzzleFlash);
+
+const shellMat = new THREE.MeshStandardMaterial({ color: 0xb9873e, metalness: .8, roughness: .28 });
+const shellGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.12, 10);
+let tableShake = 0;
+function ejectShell(from, side) {
+  const shell = new THREE.Mesh(shellGeo, shellMat);
+  shell.position.copy(from);
+  shell.rotation.z = Math.PI / 2;
+  scene.add(shell);
+  const start = performance.now();
+  const origin = shell.position.clone();
+  function step(now) {
+    const p = Math.min(1, (now - start) / 620);
+    shell.position.set(origin.x + side * (0.25 * p), origin.y + 0.42 * p - 0.5 * p * p, origin.z + 0.08 * p);
+    shell.rotation.x += 0.18;
+    shell.rotation.z += 0.23;
+    if (p < 1) requestAnimationFrame(step);
+    else scene.remove(shell);
+  }
+  requestAnimationFrame(step);
+  SFX.shell();
+}
+function pumpAction(done) {
+  const startRot = gunGroup.rotation.x;
+  const startPos = gunGroup.position.clone();
+  const t0 = performance.now();
+  function step(now) {
+    const p = Math.min(1, (now - t0) / 420);
+    const wave = Math.sin(p * Math.PI);
+    gunGroup.rotation.x = startRot - wave * 0.16;
+    gunGroup.position.z = startPos.z + wave * 0.08;
+    if (p < 1) requestAnimationFrame(step);
+    else {
+      gunGroup.rotation.x = startRot;
+      gunGroup.position.copy(startPos);
+      SFX.pump();
+      done && done();
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+// ============ 玩家持枪的手（第一人称，附着在枪下方） ============
+const handGroup = new THREE.Group();
+const skinMat = new THREE.MeshStandardMaterial({ color: 0xd8a878, roughness: .6 });
+const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x3a2414, roughness: .7 });
+// 手掌（握枪）
+const palm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.14, 0.18), skinMat);
+palm.position.set(-0.2, -0.26, 0);
+palm.castShadow = true;
+handGroup.add(palm);
+// 手指（几根小圆柱，握在护木/枪机处）
+[[-0.3,-0.2],[ -0.24,-0.32],[-0.14,-0.36]].forEach((p, i) => {
+  const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.2, 10), skinMat);
+  finger.rotation.z = Math.PI / 2;
+  finger.position.set(p[0], p[1], p[2] != null ? p[2] : 0);
+  handGroup.add(finger);
+});
+// 手臂（袖子）
+const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.7, 12), sleeveMat);
+arm.position.set(0.05, -0.55, 0);
+arm.rotation.x = -0.5;
+handGroup.add(arm);
+handGroup.visible = false; // 未持枪时隐藏
+scene.add(handGroup);
+
+// ============ 对面 AI 剪影 ============
+const aiGroup = new THREE.Group();
+const aiBody = new THREE.MeshStandardMaterial({ color: 0x1a1a20, roughness: .7 });
+// 身体
+const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.7, 16), aiBody);
+torso.position.y = 1.45;
+aiGroup.add(torso);
+const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.25, 0.38), aiBody);
+shoulder.position.set(0, 1.72, 0);
+shoulder.rotation.z = 0.02;
+aiGroup.add(shoulder);
+const collar = new THREE.Mesh(
+  new THREE.TorusGeometry(0.2, 0.035, 8, 20),
+  new THREE.MeshStandardMaterial({ color: 0x4a1112, roughness: .68 })
+);
+collar.rotation.x = Math.PI / 2;
+collar.position.set(0, 1.78, 0);
+aiGroup.add(collar);
+// 头
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 24, 24), aiBody);
+head.position.y = 2.0;
+aiGroup.add(head);
+const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.12, 0.2), aiBody);
+jaw.position.set(0, 1.88, 0.02);
+aiGroup.add(jaw);
+// 恶魔角
+const hornMat = new THREE.MeshStandardMaterial({ color: 0x3a0d0a, roughness: .5 });
+[[-0.14,0.16],[0.14,0.16]].forEach(p => {
+  const horn = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.3, 12), hornMat);
+  horn.position.set(p[0], 2.22, 0);
+  horn.rotation.z = p[0] > 0 ? -0.3 : 0.3;
+  aiGroup.add(horn);
+});
+// 红眼
+const eyeMat = new THREE.MeshStandardMaterial({ color: 0xff2222, emissive: 0xff0000, emissiveIntensity: 1.5 });
+[[-0.08,0.06],[0.08,0.06]].forEach(p => {
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), eyeMat);
+  eye.position.set(p[0], 2.02, 0.2);
+  aiGroup.add(eye);
+});
+// 手（撑在桌上）
+const armMat = new THREE.MeshStandardMaterial({ color: 0x18181e, roughness: .7 });
+[[-0.5,0],[0.5,0]].forEach(p => {
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.6, 12), armMat);
+  arm.position.set(p[0], 1.2, -0.1);
+  arm.rotation.x = -0.9;
+  aiGroup.add(arm);
+});
+aiGroup.position.set(0, 0, -2.6);
+scene.add(aiGroup);
+
+// AI 受击反馈：后仰 + 红光闪烁
+let aiHitAnim = 0; // 0=无动画，>0 表示受击动画进行中
+function aiHitReaction() {
+  aiHitAnim = 1;
+}
+
+// ============ 道具（3D 视觉，放在玩家半区桌上） ============
+const itemObjs = {};
+function makeItemGeo(type) {
+  const g = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.035, 20),
+    new THREE.MeshStandardMaterial({ color: 0x33281c, roughness: .6 }));
+  g.add(base);
+
+  switch (type) {
+    case 'magnifier': {
+      const rimMat = new THREE.MeshStandardMaterial({ color: 0x17191e, metalness: .82, roughness: .22 });
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.145, 0.018, 12, 36), rimMat);
+      ring.position.y = 0.14; ring.rotation.x = Math.PI / 2;
+      g.add(ring);
+      const innerRing = new THREE.Mesh(new THREE.TorusGeometry(0.122, 0.006, 8, 32),
+        new THREE.MeshStandardMaterial({ color: 0x60636a, metalness: .65, roughness: .3 }));
+      innerRing.position.y = 0.142; innerRing.rotation.x = Math.PI / 2;
+      g.add(innerRing);
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.12, 32),
+        new THREE.MeshPhysicalMaterial({ color: 0xbfdcff, roughness: .08, transmission: .25, transparent: true, opacity: .5 }));
+      lens.position.y = 0.14; lens.rotation.x = -Math.PI / 2;
+      g.add(lens);
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.032, 0.1, 10),
+        new THREE.MeshStandardMaterial({ color: 0xa5a8ad, metalness: .8, roughness: .24 }));
+      neck.rotation.z = -0.68; neck.position.set(0.13, 0.09, 0);
+      g.add(neck);
+      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.28, 14),
+        new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: .38, metalness: .18 }));
+      handle.rotation.z = -0.68; handle.position.set(0.25, -0.015, 0);
+      g.add(handle);
+      break;
+    }
+    case 'drink': {
+      const can = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.28, 28),
+        new THREE.MeshStandardMaterial({ color: 0x9f1f24, roughness: .3, metalness: .35 }));
+      can.position.y = 0.14;
+      g.add(can);
+      const label = new THREE.Mesh(new THREE.CylinderGeometry(0.092, 0.092, 0.18, 28),
+        new THREE.MeshStandardMaterial({ color: 0xb92b30, roughness: .5, metalness: .12 }));
+      label.position.y = 0.13; g.add(label);
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.016, 28),
+        new THREE.MeshStandardMaterial({ color: 0xbfc3c8, metalness: .88, roughness: .22 }));
+      top.position.y = 0.255;
+      g.add(top);
+      const tab = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.006, 6, 16),
+        new THREE.MeshStandardMaterial({ color: 0xb0b0b8, metalness: .8, roughness: .3 }));
+      tab.rotation.x = Math.PI / 2; tab.position.set(0, 0.269, 0.012);
+      g.add(tab);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.087, 0.006, 6, 24),
+        new THREE.MeshStandardMaterial({ color: 0x6e747c, metalness: .7, roughness: .3 }));
+      rim.rotation.x = Math.PI / 2; rim.position.y = 0.27; g.add(rim);
+      break;
+    }
+    case 'saw': {
+      const bladeMat = new THREE.MeshStandardMaterial({ color: 0xc8cbd0, metalness: .9, roughness: .3 });
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.035, 0.13), bladeMat);
+      blade.position.set(-0.02, 0.11, 0);
+      g.add(blade);
+      const toothMat = new THREE.MeshStandardMaterial({ color: 0x9b9ea4, metalness: .82, roughness: .34 });
+      for (let i = 0; i < 13; i++) {
+        const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.035, 4), toothMat);
+        tooth.rotation.z = Math.PI / 2;
+        tooth.position.set(-0.22 + i * 0.034, 0.075, 0.07);
+        g.add(tooth);
+      }
+      const handleMat = new THREE.MeshStandardMaterial({ color: 0x17191d, metalness: .3, roughness: .32 });
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.2, 0.14), handleMat);
+      handle.position.set(0.27, 0.13, 0); handle.rotation.z = -0.12; g.add(handle);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.16, 0.16),
+        new THREE.MeshStandardMaterial({ color: 0x292c32, roughness: .48 }));
+      grip.position.set(0.31, 0.02, 0); grip.rotation.z = -0.12; g.add(grip);
+      const rivetMat = new THREE.MeshStandardMaterial({ color: 0xbfc3c9, metalness: .9, roughness: .22 });
+      [-0.01, 0.07].forEach(y => {
+        const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.012, 10), rivetMat);
+        rivet.rotation.x = Math.PI / 2; rivet.position.set(0.25, y + 0.1, 0.075); g.add(rivet);
+      });
+      break;
+    }
+    case 'pill': {
+      // 胶囊：红白两半，平放
+      const half1 = new THREE.Mesh(new THREE.SphereGeometry(0.065, 20, 20),
+        new THREE.MeshStandardMaterial({ color: 0xe23a30, roughness: .3 }));
+      half1.position.set(-0.06, 0.09, 0);
+      g.add(half1);
+      const half2 = new THREE.Mesh(new THREE.SphereGeometry(0.065, 20, 20),
+        new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: .3 }));
+      half2.position.set(0.06, 0.09, 0);
+      g.add(half2);
+      const mid = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.12, 20),
+        new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: .3 }));
+      mid.rotation.z = Math.PI / 2; mid.position.set(0, 0.09, 0);
+      g.add(mid);
+      break;
+    }
+    case 'handcuff': {
+      const steel = new THREE.MeshStandardMaterial({ color: 0xc9ccd0, metalness: .92, roughness: .22 });
+      const darkSteel = new THREE.MeshStandardMaterial({ color: 0x6f747b, metalness: .85, roughness: .3 });
+      const ring1 = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.018, 12, 30), steel);
+      ring1.rotation.x = Math.PI / 2; ring1.position.set(-0.13, 0.13, 0);
+      g.add(ring1);
+      const ring2 = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.018, 12, 30), steel);
+      ring2.rotation.x = Math.PI / 2; ring2.position.set(0.13, 0.13, 0);
+      g.add(ring2);
+      [-0.13, 0.13].forEach(x => {
+        const lock = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.08, 0.12), darkSteel);
+        lock.position.set(x, 0.14, -0.07); lock.rotation.z = x < 0 ? -0.2 : 0.2; g.add(lock);
+        const plate = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.012, 0.09), steel);
+        plate.position.set(x, 0.185, -0.07); plate.rotation.z = x < 0 ? -0.2 : 0.2; g.add(plate);
+      });
+      const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.17, 10), steel);
+      chain.rotation.z = Math.PI / 2; chain.position.set(0, 0.12, -0.07);
+      g.add(chain);
+      const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.025, 12), steel);
+      hinge.rotation.x = Math.PI / 2; hinge.position.set(-0.13, 0.13, 0.03); g.add(hinge);
+      const hinge2 = hinge.clone(); hinge2.position.x = 0.13; g.add(hinge2);
+      break;
+    }
+    case 'battery': {
+      // 电池：圆柱 + 顶部凸起
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.2, 20),
+        new THREE.MeshStandardMaterial({ color: 0x2a2a33, roughness: .4, metalness: .3 }));
+      body.position.y = 0.12;
+      g.add(body);
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.04, 16),
+        new THREE.MeshStandardMaterial({ color: 0xd9a020, metalness: .8, roughness: .3 }));
+      top.position.y = 0.24;
+      g.add(top);
+      const label = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.08, 20),
+        new THREE.MeshStandardMaterial({ color: 0x2f8f4a, roughness: .4 }));
+      label.position.y = 0.1;
+      g.add(label);
+      break;
+    }
+    case 'phone': {
+      const red = new THREE.MeshStandardMaterial({ color: 0x8f1d20, roughness: .3, metalness: .32 });
+      const redDark = new THREE.MeshStandardMaterial({ color: 0x4a1115, roughness: .42, metalness: .2 });
+      const chrome = new THREE.MeshStandardMaterial({ color: 0xc8cbd0, roughness: .24, metalness: .85 });
+      const lower = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.055, 0.32), red);
+      lower.position.set(0, 0.08, 0.1); g.add(lower);
+      const keypad = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.012, 0.22), chrome);
+      keypad.position.set(0, 0.112, 0.1); g.add(keypad);
+      for (let row = 0; row < 4; row++) for (let col = 0; col < 3; col++) {
+        const keycap = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.012, 0.028), redDark);
+        keycap.position.set(-0.055 + col * 0.055, 0.125, 0.02 + row * 0.052); g.add(keycap);
+      }
+      const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.2, 12), chrome);
+      hinge.rotation.z = Math.PI / 2; hinge.position.set(0, 0.12, -0.04); g.add(hinge);
+      const upper = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.055, 0.28), red);
+      upper.position.set(0, 0.22, -0.12); upper.rotation.x = -0.3; g.add(upper);
+      const bezel = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.012, 0.2), redDark);
+      bezel.position.set(0, 0.255, -0.155); bezel.rotation.x = -0.3; g.add(bezel);
+      const screen = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.008, 0.15),
+        new THREE.MeshStandardMaterial({ color: 0x657276, roughness: .18, metalness: .15, emissive: 0x182628, emissiveIntensity: .45 }));
+      screen.position.set(0, 0.263, -0.157); screen.rotation.x = -0.3; g.add(screen);
+      const speaker = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.01, 0.018), chrome);
+      speaker.position.set(0, 0.27, -0.055); speaker.rotation.x = -0.3; g.add(speaker);
+      break;
+    }
+  }
+  return g;
+}
+// 7 个道具槽位（玩家半区桌上，围绕桌子前端弧线排布）
+const ITEM_SLOTS = [
+  { type: 'magnifier', x: -1.5,  z: 0.65 },
+  { type: 'drink',     x: -1.0,  z: 1.0 },
+  { type: 'saw',       x: -0.5,  z: 1.15 },
+  { type: 'pill',      x: 0.0,   z: 1.2 },
+  { type: 'handcuff',  x: 0.5,   z: 1.15 },
+  { type: 'battery',   x: 1.0,   z: 1.0 },
+  { type: 'phone',     x: 1.5,   z: 0.65 },
+];
+ITEM_SLOTS.forEach(s => {
+  const obj = makeItemGeo(s.type);
+  obj.position.set(s.x, 1.05, s.z);
+  obj.visible = false; // 默认隐藏，renderItems 时根据库存显示
+  scene.add(obj);
+  itemObjs[s.type] = obj;
+});
+
+// 更新 3D 道具的显示（根据玩家当前库存）
+function renderItemObjs() {
+  ITEM_SLOTS.forEach(s => {
+    const count = state.itemsYou[s.type] || 0;
+    itemObjs[s.type].visible = count > 0;
+  });
+}
+
+// ============ 玩家视角的手（可选简单示意） ============
+// 略，保持干净
+
+// ============================================================
+//  视角控制（鼠标/触摸拖动小幅旋转）
+// ============================================================
+const yaw = { v: 0 }, pitch = { v: 0 };
+const YAW_LIMIT = 0.5, PITCH_LIMIT = 0.28;
+let dragging = false, lastX = 0, lastY = 0, downX = 0, downY = 0;
+
+canvas.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; downX = e.clientX; downY = e.clientY; });
+window.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  yaw.v = THREE.MathUtils.clamp(yaw.v + dx * 0.004, -YAW_LIMIT, YAW_LIMIT);
+  pitch.v = THREE.MathUtils.clamp(pitch.v + dy * 0.004, -PITCH_LIMIT, PITCH_LIMIT);
+});
+window.addEventListener('pointerup', () => dragging = false);
+
+// 判断本次点击是否为"拖动视角"（位移过大则不算点击）
+function wasDrag(e) {
+  const dx = e.clientX - downX, dy = e.clientY - downY;
+  return dx * dx + dy * dy > 64; // 超过 8px 视为拖动
+}
+
+function applyCamera() {
+  camera.position.set(
+    CAM_HOME.x + Math.sin(yaw.v) * 0.4,
+    CAM_HOME.y + pitch.v,
+    CAM_HOME.z - Math.cos(yaw.v) * 0.4
+  );
+  camera.lookAt(0, 1.0, -1.2);
+}
+
+// ============================================================
+//  游戏状态
+// ============================================================
+const state = {
+  you: MAX_HP,
+  ai: MAX_HP,
+  maxHp: MAX_HP,
+  chamber: [],      // 子弹序列 ['live'|'blank']
+  idx: 0,           // 下一发子弹索引
+  currentTurn: null, // 'you' | 'ai'
+  itemsYou: {},     // {type: count}
+  itemsAi: {},
+  sawActive: false, // 是否已用锯子（本发伤害翻倍）—— 兼容旧字段，实际用 sawCharges
+  sawCharges: 0,    // 锯子充能层数（锯子/电池各 +1，每次开火消耗 1 层，实弹伤害×2）
+  aiSaw: false,     // AI 是否已上锯子
+  skipTurn: false,  // 手铐：跳过 'you' 或 'ai' 的下一个回合
+  round: 1,
+  stage: 1,
+  phase: 'idle',    // idle | yourTurn | aiTurn | over
+  busy: false,
+  holdingGun: false, // 玩家是否已拿起枪（瞄准模式）
+  winsYou: 0,       // 多局制：玩家胜局数
+  winsAi: 0,        // 多局制：AI 胜局数
+  playerIntel: null,
+  aiIntel: null,
+  itemSlots: 0,
+};
+// ============================================================
+//  工具函数
+// ============================================================
+function randItem() { return ITEM_POOL[Math.floor(Math.random() * ITEM_POOL.length)]; }
+function dealItems(who, n) {
+  const inv = who === 'you' ? state.itemsYou : state.itemsAi;
+  const stageCfg = STAGE_CONFIG[Math.min(state.stage, STAGE_CONFIG.length) - 1];
+  const cnt = n != null ? n : stageCfg.items;
+  const free = Math.max(0, MAX_ITEM_SLOTS - Object.values(inv).reduce((sum, value) => sum + value, 0));
+  for (let i = 0; i < Math.min(cnt, free); i++) {
+    const t = randItem();
+    inv[t] = (inv[t] || 0) + 1;
+  }
+}
+function liveCount() { return state.chamber.slice(state.idx).filter(b => b === 'live').length; }
+function totalCount() { return state.chamber.length - state.idx; }
+function nextBullet() { return state.chamber[state.idx]; }
+function shiftIntel() {
+  ['playerIntel', 'aiIntel'].forEach(key => {
+    if (!state[key]) return;
+    state[key].position--;
+    if (state[key].position <= 0) state[key] = null;
+  });
+}
+
+// ============================================================
+//  渲染 HUD
+// ============================================================
+const heartsYou = document.getElementById('heartsYou');
+const heartsAi = document.getElementById('heartsAi');
+const bulletRow = document.getElementById('bulletRow');
+const knownInfo = document.getElementById('knownInfo');
+const aiItemsEl = document.getElementById('aiItems');
+const roundTag = document.getElementById('roundTag');
+const itemsEl = document.getElementById('items');
+const toastEl = document.getElementById('toast');
+
+function renderHearts() {
+  const y = '<span class="heart">❤</span>'.repeat(state.you) +
+            '<span class="heart lost">❤</span>'.repeat(state.maxHp - state.you);
+  const a = '<span class="heart">❤</span>'.repeat(state.ai) +
+            '<span class="heart lost">❤</span>'.repeat(state.maxHp - state.ai);
+  heartsYou.innerHTML = y; heartsAi.innerHTML = a;
+  // 低血心跳
+  if (state.you === 1 || state.ai === 1) startHeartbeat();
+  else stopHeartbeat();
+  // 低血屏幕泛红（玩家剩 1 血时）
+  const vg = document.getElementById('vignette');
+  if (state.you === 1) vg.classList.add('low');
+  else vg.classList.remove('low');
+}
+function renderBullets() {
+  // 子弹顺序对双方保密：只显示剩余数量，不显示具体顺序
+  bulletRow.innerHTML = '';
+  const n = totalCount();
+  const hint = document.createElement('span');
+  hint.style.cssText = 'font-size:12px;color:#a8916f;letter-spacing:2px;';
+  hint.textContent = '弹仓剩余 ' + n + ' 发';
+  bulletRow.appendChild(hint);
+  roundTag.textContent = '阶段 ' + state.stage + ' · 装填 ' + state.round;
+  knownInfo.textContent = state.playerIntel
+    ? '情报：第 ' + state.playerIntel.position + ' 发为' + (state.playerIntel.type === 'live' ? '实弹' : '空包弹')
+    : '';
+}
+function renderAiItems() {
+  if (!aiItemsEl) return;
+  aiItemsEl.innerHTML = '';
+  ITEM_POOL.forEach(type => {
+    const count = state.itemsAi[type] || 0;
+    if (!count) return;
+    const span = document.createElement('span');
+    span.textContent = ITEM_META[type].ic + '×' + count;
+    aiItemsEl.appendChild(span);
+  });
+}
+function renderItems() {
+  itemsEl.innerHTML = '';
+  // 只显示玩家当前拥有的道具
+  ITEM_POOL.forEach(t => {
+    const count = state.itemsYou[t] || 0;
+    if (count <= 0) return;
+    const d = document.createElement('div');
+    d.className = 'item' + (state.sawActive && t === 'saw' ? ' armed' : '');
+    d.innerHTML = `<span class="ic">${ITEM_META[t].ic}</span><span class="nm">${ITEM_META[t].nm}</span>` +
+      `<span class="cnt">${count}</span>`;
+    d.addEventListener('click', () => useItem(t));
+    itemsEl.appendChild(d);
+  });
+  renderItemObjs();
+  renderAiItems();
+}
+function toast(text, color = 'gold') {
+  toastEl.textContent = text;
+  toastEl.className = 'show ' + color;
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => toastEl.className = '', 1200);
+}
+
+// 恶魔台词气泡
+const speechEl = document.getElementById('speech');
+let speechTimer = null;
+const SPEECH = {
+  taunt: ['「敢和我玩命？你胆子不小。」', '「这桌上，总得倒下一个人。」', '「弹匣里有什么，只有上帝知道。」', '「你紧张的样子，真有意思。」', '「来吧，让我看看你的运气。」'],
+  hit: ['「……有点疼。」', '「呵，还不赖。」', '「这一下，我会还回来。」', '「血的味道。」', '「继续，我还没倒下。」'],
+  win: ['「就这点本事？」', '「你的运气，到头了。」', '「跟我赌命？笑话。」', '「下一个是谁？」'],
+  lose: ['「不……这不可能……」', '「你赢了……这次。」', '「该死……下次……」'],
+  selfHit: ['「我赌它是空的。」', '「我的命，我说了算。」', '「咔哒……」'],
+};
+function speak(kind) {
+  const arr = SPEECH[kind] || SPEECH.taunt;
+  speechEl.textContent = arr[Math.floor(Math.random() * arr.length)];
+  speechEl.classList.add('show');
+  clearTimeout(speechTimer);
+  speechTimer = setTimeout(() => speechEl.classList.remove('show'), 2000);
+}
+
+// 比分显示
+function renderScore() {
+  document.getElementById('scoreTag').textContent =
+    '阶段比分 ' + state.winsYou + ' : ' + state.winsAi + '（三阶段两胜）';
+}
+
+// ============================================================
+//  核心流程
+// ============================================================
+function loadChamber() {
+  state.chamber = [];
+  const n = bulletsForRound(state.round);
+  const liveN = Math.max(1, Math.min(n - 1, Math.floor(n * (0.35 + Math.random() * 0.3))));
+  for (let i = 0; i < liveN; i++) state.chamber.push('live');
+  for (let i = liveN; i < n; i++) state.chamber.push('blank');
+  // 随机打乱顺序，填入枪中（顺序对双方保密）
+  for (let i = state.chamber.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [state.chamber[i], state.chamber[j]] = [state.chamber[j], state.chamber[i]];
+  }
+  state.idx = 0;
+  state.sawActive = false;
+  state.sawCharges = 0;
+  state.aiKnows = null;
+  state.aiIntel = null;
+  state.playerIntel = null;
+  state.aiSaw = false;
+  state.skipTurn = false; // 装弹后手铐失效
+  // 重置 AI 对本轮玩家行为的记忆
+  state.playerSaw = false;      // 玩家本轮是否用放大镜看过
+  state.playerUsedSaw = false;  // 玩家本轮是否用过锯子
+  renderBullets();
+}
+
+// 展示本轮子弹构成（只展示数量构成，不展示顺序）
+function showLoadPanel() {
+  const liveN = state.chamber.filter(b => b === 'live').length;
+  const blankN = state.chamber.length - liveN;
+  const lb = document.getElementById('loadBullets');
+  lb.innerHTML = '';
+  // 展示构成：实弹 + 空包弹图标（逐个飞入高亮）
+  const total = state.chamber.length;
+  for (let i = 0; i < liveN; i++) lb.appendChild(makeLoadBullet('live'));
+  for (let i = 0; i < blankN; i++) lb.appendChild(makeLoadBullet('blank'));
+  document.getElementById('loadSummary').textContent =
+    '实弹 ' + liveN + ' 发 · 空包弹 ' + blankN + ' 发';
+  document.getElementById('loadPanel').classList.add('show');
+  // 逐个高亮（模拟装弹）
+  const cells = lb.children;
+  for (let i = 0; i < cells.length; i++) {
+    setTimeout(() => { cells[i].classList.add('pop'); }, i * 120);
+  }
+}
+function makeLoadBullet(type) {
+  const d = document.createElement('span');
+  d.className = 'lb ' + type;
+  d.textContent = type === 'live' ? '实' : '空';
+  return d;
+}
+function hideLoadPanel() {
+  document.getElementById('loadPanel').classList.remove('show');
+}
+
+function startRound() {
+  state.busy = true;
+  state.holdingGun = false;
+  hideAimHint();
+  loadChamber();
+  dealItems('you');
+  dealItems('ai');
+  renderItems();
+  renderHearts();
+  state.currentTurn = Math.random() < 0.5 ? 'you' : 'ai';
+  state.phase = 'idle';
+  // 枪回到桌子中间
+  moveGunTo(GUN_POS.center, 400, () => { gunGroup.rotation.y = -Math.PI / 2; });
+
+  // 展示本轮子弹构成（不展示顺序）
+  showLoadPanel();
+  SFX.load();
+  // 装弹演出：枪口下压回弹
+  gunLoadAnim();
+  toast(state.currentTurn === 'you' ? '你先手' : '对手先手', 'gold');
+
+  // 展示约 1.6 秒后隐藏，填入枪中，开始回合
+  setTimeout(() => {
+    hideLoadPanel();
+    state.busy = false;
+    state.phase = state.currentTurn === 'you' ? 'yourTurn' : 'aiTurn';
+    if (state.phase === 'yourTurn') beginYourTurn();
+    else beginAiTurn();
+  }, 1600);
+}
+
+function beginYourTurn() {
+  state.phase = 'yourTurn';
+  state.busy = false;   // 关键：AI 回合结束切换回来时必须解锁，否则无法点击枪/道具
+  state.holdingGun = false;
+  renderItems();
+}
+function beginAiTurn() {
+  state.phase = 'aiTurn';
+  state.busy = true;
+  renderItems();
+  setTimeout(() => aiAct(), 700);
+}
+
+// 使用道具（仅玩家回合）
+function useItem(type) {
+  if (state.phase !== 'yourTurn' || state.busy) return;
+  if (!state.itemsYou[type] || state.itemsYou[type] <= 0) return;
+  if (totalCount() <= 0) return;
+  state.itemsYou[type]--;
+  renderItems();
+  SFX.item();
+  applyItem(type, 'you');
+  // 道具用完后仍可继续行动，不结束回合
+}
+
+function applyItem(type, who) {
+  const isYou = who === 'you';
+  // 记录玩家行为供 AI 读心
+  if (isYou) {
+    if (type === 'magnifier') state.playerSaw = true;
+    if (type === 'saw') state.playerUsedSaw = true;
+  }
+  switch (type) {
+    case 'magnifier': {
+      const b = nextBullet();
+      if (isYou) {
+        state.playerIntel = { position: 1, type: b };
+        toast(b === 'live' ? '下一发：实弹 🔴' : '下一发：空包弹 ⚪',
+              b === 'live' ? 'red' : 'gold');
+      }
+      break;
+    }
+    case 'drink': {
+      if (totalCount() > 0) {
+        const b = state.chamber[state.idx];
+        state.chamber.splice(state.idx, 1);
+        state.playerIntel = null;
+        state.aiIntel = null;
+        renderBullets();
+        toast('退掉了一发' + (b === 'live' ? '实弹' : '空包弹'), 'gold');
+        if (totalCount() <= 0) { endOfChamber(); return; }
+      }
+      break;
+    }
+    case 'saw': {
+      state.sawCharges++;
+      state.sawActive = true;
+      toast('锯子已上膛 · 下一发伤害×2', 'gold');
+      break;
+    }
+    case 'battery': {
+      state.sawCharges++;
+      state.sawActive = true;
+      toast('电池充能 · 锯子伤害延续', 'gold');
+      break;
+    }
+    case 'handcuff': {
+      // 手铐：跳过对方下一个回合
+      state.skipTurn = isYou ? 'ai' : 'you';
+      toast(isYou ? '已给对方戴上手铐 · 跳过其下回合' : '对手给你戴上手铐', 'gold');
+      break;
+    }
+    case 'phone': {
+      const offset = totalCount() > 1 ? Math.floor(Math.random() * Math.min(3, totalCount() - 1)) + 1 : 1;
+      const pos = Math.min(totalCount(), offset);
+      const b = state.chamber[state.idx + pos - 1];
+      if (isYou) state.playerIntel = { position: pos, type: b };
+      toast('手机：第 ' + pos + ' 发是' + (b === 'live' ? '实弹' : '空包弹'), 'gold');
+      break;
+    }
+    case 'pill': {
+      const hp = isYou ? 'you' : 'ai';
+      if (state[hp] < state.maxHp) { state[hp]++; renderHearts(); toast(isYou ? '恢复了 1 点生命' : '对手恢复了 1 点生命', 'gold'); }
+      else toast('生命已满', 'gold');
+      break;
+    }
+  }
+}
+
+// 开枪（玩家已持枪瞄准，target: 'self' | 'enemy'）
+function shoot(target) {
+  if (state.phase !== 'yourTurn' || state.busy) return;
+  if (totalCount() <= 0) return;
+  state.busy = true;
+  state.holdingGun = false;
+  hideAimHint();
+  state.playerSaw = false; // 开枪后，玩家"看过子弹"的信息失效
+  state.playerIntel = null;
+  const b = state.chamber[state.idx];
+  state.idx++;
+  shiftIntel();
+  const dmg = b === 'live' ? (state.sawCharges > 0 ? 2 : 1) : 0;
+  if (state.sawCharges > 0) state.sawCharges--;
+  state.sawActive = state.sawCharges > 0;
+  renderBullets();
+
+  const hitSelf = target === 'self';
+  const victim = hitSelf ? 'you' : 'ai';
+
+  // 开枪动画：枪已在玩家手里，枪口指向目标 → 开火
+  fireGun(target, b, () => {
+    if (b === 'live') {
+      state[victim] -= dmg;
+      renderHearts();
+      if (victim === 'you') playerHitRecovery();
+      if (!hitSelf) { aiHitReaction(); speak('hit'); } // AI 被击中受击反馈+台词
+      toast((hitSelf ? '你' : '对手') + '中了实弹！-' + dmg, 'red');
+      if (state[victim] <= 0) { gameOver(victim); return; }
+    } else {
+      toast('空包弹 —— 咔哒', 'gold');
+    }
+
+    state.busy = false;
+
+    // 判定回合是否结束
+    const blankSelf = (b === 'blank' && hitSelf);
+    if (blankSelf) {
+      // 自己打空包弹，回合继续（枪仍在手里，重新瞄准）
+      if (totalCount() <= 0) { endOfChamber(); return; }
+      state.phase = 'yourTurn';
+      state.holdingGun = true;
+      showAimHint();
+      renderItems();
+    } else {
+      // 其余情况：回合结束，枪给对方（枪回到中间）
+      if (totalCount() <= 0) { endOfChamber(); return; }
+      switchTurn('you');
+    }
+  });
+}
+
+function switchTurn(from) {
+  state.currentTurn = from === 'you' ? 'ai' : 'you';
+  state.phase = state.currentTurn === 'you' ? 'yourTurn' : 'aiTurn';
+  state.holdingGun = false;
+  hideAimHint();
+  renderItems();
+
+  // 手铐：若对方被跳过，直接再切回原方
+  if (state.skipTurn && state.skipTurn === state.currentTurn) {
+    const skipped = state.skipTurn;
+    state.skipTurn = false;
+    toast(skipped === 'ai' ? '对手被手铐锁住 · 跳过' : '你被手铐锁住 · 跳过', 'gold');
+    state.currentTurn = from; // 切回原方
+    state.phase = state.currentTurn === 'you' ? 'yourTurn' : 'aiTurn';
+  }
+
+  // 枪先回到桌子中间
+  moveGunTo(GUN_POS.center, 400, () => {
+    gunGroup.rotation.y = -Math.PI / 2;
+    if (state.phase === 'yourTurn') { beginYourTurn(); }
+    else { beginAiTurn(); }
+  });
+}
+
+function endOfChamber() {
+  toast('子弹打空 · 重新装填', 'gold');
+  state.busy = true;
+  setTimeout(() => {
+    state.busy = false;
+    state.round++;
+    startRound();
+  }, 1200);
+}
+
+function gameOver(loser) {
+  state.phase = 'over';
+  // 多局制：累计比分
+  const winner = loser === 'ai' ? 'you' : 'ai';
+  if (winner === 'you') { state.winsYou++; speak('lose'); }
+  else { state.winsAi++; speak('win'); }
+  state.stage = Math.min(3, Math.max(state.winsYou, state.winsAi) + 1);
+  renderScore();
+
+  const overlay = document.getElementById('overlay');
+  const title = document.getElementById('overTitle');
+  const sub = document.getElementById('overSub');
+  const btn = document.getElementById('overBtn');
+
+  // 达到 2 胜 → 最终胜负
+  if (state.winsYou >= 2 || state.winsAi >= 2) {
+    const finalWin = state.winsYou >= 2;
+    title.textContent = finalWin ? '最终胜利' : '最终失败';
+    title.className = finalWin ? 'win' : 'lose';
+    sub.textContent = finalWin
+      ? '你以 ' + state.winsYou + ':' + state.winsAi + ' 战胜了恶魔'
+      : '恶魔以 ' + state.winsAi + ':' + state.winsYou + ' 战胜了你';
+    btn.textContent = '重新开始';
+    state._final = true;
+    overlay.classList.add('show');
+  } else {
+    // 未分胜负，进入下一局
+    title.textContent = winner === 'you' ? '阶段胜利' : '阶段失败';
+    title.className = winner === 'you' ? 'win' : 'lose';
+    sub.textContent = '阶段比分 ' + state.winsYou + ' : ' + state.winsAi + ' · 准备下一阶段…';
+    btn.textContent = '下一阶段';
+    state._final = false;
+    overlay.classList.add('show');
+  }
+}
+
+function resetGame() {
+  state.maxHp = STAGE_CONFIG[Math.min(state.stage, STAGE_CONFIG.length) - 1].hp;
+  state.you = state.maxHp; state.ai = state.maxHp;
+  state.itemsYou = {}; state.itemsAi = {};
+  state.sawActive = false; state.sawCharges = 0; state.round = 1;
+  state.phase = 'idle'; state.busy = false;
+  state.aiKnows = null; state.aiSaw = false;
+  state.holdingGun = false;
+  state.skipTurn = false;
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('loadPanel').classList.remove('show');
+  hideAimHint();
+  gunGroup.position.copy(GUN_POS.center);
+  gunGroup.rotation.y = -Math.PI / 2;
+  renderHearts(); renderItems(); renderScore();
+  startRound();
+}
+
+// 完整重置（最终胜负后重新开始，清空比分）
+function fullReset() {
+  state.winsYou = 0; state.winsAi = 0;
+  state.stage = 1;
+  resetGame();
+}
+
+// ============================================================
+//  AI 决策
+// ============================================================
+function aiAct() {
+  if (state.phase !== 'aiTurn' || state.phase === 'over') return;
+
+  if (state.aiIntel && state.aiIntel.position === 1) state.aiKnows = state.aiIntel.type;
+  const known = nextBullet(); // AI 是否"知道"当前子弹（通过放大镜得知）
+  const inv = state.itemsAi;
+  const has = t => (inv[t] || 0) > 0;
+
+  // 决策链（带读心/诈唬/反制）
+  const decide = () => {
+    const ratio = liveCount() / Math.max(1, totalCount());
+    const hpGap = state.ai - state.you;      // >0 AI 领先，<0 AI 落后
+
+    // 1. 血量低且有胶囊 → 回血（濒死时更果断）
+    if (state.ai < state.maxHp && has('pill') && Math.random() < (state.ai === 1 ? 0.95 : 0.7)) {
+      return { type: 'item', item: 'pill' };
+    }
+
+    // 2. 反制：玩家上了锯子（下一发可能是高伤害实弹）→ 退弹或回血规避
+    if (state.playerUsedSaw && state.aiKnows == null) {
+      if (has('drink') && ratio > 0.35 && Math.random() < 0.7) return { type: 'item', item: 'drink' };
+      if (has('pill') && state.ai < state.maxHp && Math.random() < 0.6) return { type: 'item', item: 'pill' };
+    }
+
+    // 3. 有放大镜且未知子弹 → 查看（血量落后时更倾向先看）
+    if (has('magnifier') && state.aiKnows == null && Math.random() < (hpGap <= 0 ? 0.9 : 0.7)) {
+      return { type: 'item', item: 'magnifier' };
+    }
+
+    // 4. 已知当前是实弹 → 上锯子再打玩家
+    if (state.aiKnows === 'live') {
+      if (has('saw') && Math.random() < 0.85) return { type: 'item', item: 'saw' };
+      if (has('battery') && state.aiSaw && Math.random() < 0.6) return { type: 'item', item: 'battery' };
+      return { type: 'shoot', target: 'you' };
+    }
+    // 5. 已知当前是空包弹 → 打自己（白赚回合）
+    if (state.aiKnows === 'blank') {
+      return { type: 'shoot', target: 'self' };
+    }
+
+    // 5.5 领先时用手铐锁玩家（制造连续压制）
+    if (has('handcuff') && hpGap > 0 && ratio > 0.5 && Math.random() < 0.5) {
+      return { type: 'item', item: 'handcuff' };
+    }
+
+    // 6. 读心：玩家看过子弹却迟迟没开枪 → 下一发大概率是实弹（玩家在等/在躲）
+    if (state.playerSaw) {
+      // 玩家知道了下一发却没用饮料退掉，说明下一发很可能不是实弹（否则他早退了）
+      // 或他看了是空弹准备打自己赚回合。此时 AI 倾向抢在他前面：打自己赌空弹
+      if (ratio < 0.45 && state.ai > 1 && Math.random() < 0.6) {
+        return { type: 'shoot', target: 'self' };
+      }
+    }
+
+    // 7. 未知：按期望 + 血量差决定打自己还是打你
+    // 打自己期望损失 = ratio * 1；打你期望收益 = ratio * 1（本回合不会打自己受伤）
+    const wantSelf = (ratio < 0.4 && state.ai > 1);       // 空弹概率高，赌自己白赚
+    const wantSelfAggro = (ratio < 0.5 && hpGap > 0 && state.ai > 1); // 领先时更敢赌
+    if (wantSelf || (wantSelfAggro && Math.random() < 0.5)) {
+      return { type: 'shoot', target: 'self' };
+    }
+    // 实弹概率高且有饮料 → 退弹
+    if (has('drink') && ratio > 0.55 && Math.random() < 0.55) {
+      return { type: 'item', item: 'drink' };
+    }
+    // 落后且实弹概率高 → 上锯子搏命
+    if (has('saw') && ratio > 0.6 && hpGap < 0 && Math.random() < 0.4) {
+      return { type: 'item', item: 'saw' };
+    }
+    return { type: 'shoot', target: 'you' };
+  };
+
+  const action = decide();
+
+  // 展示 AI 行动
+  setTimeout(() => {
+    if (action.type === 'item') {
+      state.itemsAi[action.item]--;
+      applyAiItem(action.item);
+      // 继续决策（同回合）
+      setTimeout(() => aiAct(), 700);
+    } else {
+      aiShoot(action.target);
+    }
+  }, 500);
+}
+
+function applyAiItem(type) {
+  switch (type) {
+    case 'magnifier':
+      state.aiKnows = nextBullet();
+      state.aiIntel = { position: 1, type: state.aiKnows };
+      toast('对手使用了放大镜', 'gold');
+      break;
+    case 'drink':
+      if (totalCount() > 0) {
+        const b = state.chamber[state.idx];
+        state.chamber.splice(state.idx, 1);
+        state.playerIntel = null;
+        state.aiIntel = null;
+        state.aiKnows = null;
+        renderBullets();
+        toast('对手退掉了一发子弹', 'gold');
+        if (totalCount() <= 0) { endOfChamber(); return; }
+      }
+      break;
+    case 'saw':
+      state.aiSaw = true;
+      toast('对手使用了锯子', 'red');
+      break;
+    case 'battery':
+      // 电池：AI 已有锯子则延续，否则等同备用
+      state.aiSaw = true;
+      toast('对手使用电池充能', 'gold');
+      break;
+    case 'handcuff':
+      state.skipTurn = 'you'; // 手铐锁住玩家下回合
+      toast('对手给你戴上手铐！', 'red');
+      break;
+    case 'phone': {
+      const offset = totalCount() > 1 ? Math.floor(Math.random() * Math.min(3, totalCount() - 1)) + 1 : 1;
+      const position = Math.min(totalCount(), offset);
+      state.aiIntel = { position, type: state.chamber[state.idx + position - 1] };
+      toast('对手使用了手机', 'gold');
+      break;
+    }
+    case 'pill':
+      if (state.ai < state.maxHp) { state.ai++; renderHearts(); toast('对手恢复了生命', 'gold'); }
+      break;
+  }
+}
+
+function aiShoot(target) {
+  const b = state.chamber[state.idx];
+  state.idx++;
+  shiftIntel();
+  const dmg = b === 'live' ? (state.aiSaw ? 2 : 1) : 0;
+  state.aiSaw = false;
+  state.aiKnows = null;
+  renderBullets();
+  const hitSelf = target === 'self';
+  const victim = hitSelf ? 'ai' : 'you';
+
+  // AI 开枪动画：枪来到 AI 手里 → 枪口指向目标 → 开火
+  moveGunTo(GUN_POS.ai, 350, () => {
+    const aimTarget = target === 'self'
+      ? new THREE.Vector3(0, 1.5, -2.6)   // 指向 AI 自己
+      : new THREE.Vector3(0, 1.5, 1.6);   // 指向玩家
+    aimAt(aimTarget, 300, () => {
+      muzzleFlash.intensity = 9;
+      if (b === 'live') { SFX.shoot(); shake(0.5); tableShake = Math.max(tableShake, 0.18); }
+      else { SFX.blank(); shake(0.15); tableShake = Math.max(tableShake, 0.08); }
+      const recoilDir = target === 'self' ? new THREE.Vector3(0, 0, -1) : new THREE.Vector3(0, 0, 1);
+      const recoilStart = gunGroup.position.clone();
+      const recoilTarget = recoilStart.clone().add(recoilDir.multiplyScalar(0.18));
+      const rt = performance.now();
+      (function recoil(now) {
+        const p = Math.min(1, (now - rt) / 160);
+        const back = Math.sin(p * Math.PI);
+        gunGroup.position.lerpVectors(recoilStart, recoilTarget, back);
+        if (p < 1) requestAnimationFrame(recoil);
+        else {
+          muzzleFlash.intensity = 0;
+          ejectShell(gunGroup.position, target === 'self' ? -1 : 1);
+          pumpAction(resolveAiShot);
+        }
+      })(rt);
+    });
+  });
+
+  function resolveAiShot() {
+    if (b === 'live') {
+      state[victim] -= dmg;
+      renderHearts();
+      if (victim === 'you') playerHitRecovery();
+      if (hitSelf) { aiHitReaction(); speak('selfHit'); } // AI 打自己命中，也受击
+      // AI 打中玩家时不说"受击"台词（受伤的是玩家），保持沉默或嘲讽
+      toast((hitSelf ? '对手' : '你') + '中了实弹！-' + dmg, 'red');
+      if (state[victim] <= 0) { gameOver(victim); return; }
+    } else {
+      if (hitSelf) speak('selfHit');
+      toast(hitSelf ? '对手打自己：空包弹' : '空包弹 —— 你躲过一劫', 'gold');
+    }
+
+    const blankSelf = (b === 'blank' && hitSelf);
+    if (blankSelf) {
+      if (totalCount() <= 0) { endOfChamber(); return; }
+      state.phase = 'aiTurn';
+      setTimeout(() => aiAct(), 700);
+    } else {
+      if (totalCount() <= 0) { endOfChamber(); return; }
+      switchTurn('ai');
+    }
+  }
+}
+
+// ============================================================
+//  开枪动画（枪来到持枪者手里 → 枪口指向目标 → 开火）
+// ============================================================
+// 枪在两个持枪者之间的关键位置：玩家一侧、桌子中央、AI 一侧
+const GUN_POS = {
+  center: new THREE.Vector3(0, 1.05, -0.4),
+  player: new THREE.Vector3(0, 1.05, 0.7),  // 靠近玩家
+  ai:     new THREE.Vector3(0, 1.05, -1.9), // 靠近 AI
+};
+
+function lerpVec(a, b, t) {
+  return new THREE.Vector3().lerpVectors(a, b, t);
+}
+function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+
+// 装弹演出：枪口下压（模拟 break-action 弹开装弹）再回弹
+function gunLoadAnim(onDone) {
+  const startRotX = gunGroup.rotation.x;
+  const dur = 500;
+  const t0 = performance.now();
+  function step(now) {
+    const p = Math.min(1, (now - t0) / dur);
+    const e = easeInOut(p);
+    // 枪口下压再回弹（用正弦做一次往返）
+    gunGroup.rotation.x = startRotX + Math.sin(p * Math.PI) * 0.9;
+    if (p < 1) requestAnimationFrame(step);
+    else {
+      gunGroup.rotation.x = startRotX;
+      onDone && onDone();
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+// 播放一段"枪移动到目标位置"的动画，完成后回调
+function moveGunTo(targetPos, duration, onDone) {
+  const startPos = gunGroup.position.clone();
+  const startTime = performance.now();
+  function step(now) {
+    const p = Math.min(1, (now - startTime) / duration);
+    const e = easeInOut(p);
+    gunGroup.position.lerpVectors(startPos, targetPos, e);
+    if (p < 1) {
+      requestAnimationFrame(step);
+    } else {
+      gunGroup.position.copy(targetPos);
+      onDone && onDone();
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+// 枪口指向目标（瞄准动画）：targetPos 为目标位置，让枪口朝向它
+function aimAt(targetPos, duration, onDone) {
+  const startRot = gunGroup.rotation.clone();
+  // 枪管沿 +X；绕 Y 旋转 θ 后枪口方向 = (cosθ, 0, -sinθ)
+  const dir = new THREE.Vector3().subVectors(targetPos, gunGroup.position).normalize();
+  const targetYaw = Math.atan2(-dir.z, dir.x);
+  const startYaw = startRot.y;
+  const startTime = performance.now();
+  function step(now) {
+    const p = Math.min(1, (now - startTime) / duration);
+    const e = easeInOut(p);
+    let delta = targetYaw - startYaw;
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+    gunGroup.rotation.y = startYaw + delta * e;
+    if (p < 1) {
+      requestAnimationFrame(step);
+    } else {
+      gunGroup.rotation.y = targetYaw;
+      onDone && onDone();
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+function fireGun(target, bulletType, onDone) {
+  // 枪已在玩家手里，直接瞄准开火
+  // 瞄准：打自己 → 枪口朝向玩家方向；打对面 → 枪口朝向 AI 方向
+  const aimTarget = target === 'self'
+    ? new THREE.Vector3(0, 1.5, 1.6)   // 指向玩家
+    : new THREE.Vector3(0, 1.5, -2.6); // 指向 AI
+  aimAt(aimTarget, 260, () => {
+    // 开火：枪口火光 + 后坐力 + 音效 + 镜头震动
+    muzzleFlash.intensity = 9;
+    if (bulletType === 'live') { SFX.shoot(); shake(0.5); tableShake = Math.max(tableShake, 0.18); }
+    else { SFX.blank(); shake(0.15); tableShake = Math.max(tableShake, 0.08); }
+    const recoilDir = target === 'self' ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 0, -1);
+    const recoilStart = gunGroup.position.clone();
+    const recoilTarget = recoilStart.clone().add(recoilDir.multiplyScalar(0.18));
+    const rt = performance.now();
+    (function recoil(now) {
+      const p = Math.min(1, (now - rt) / 160);
+      const back = Math.sin(p * Math.PI);
+      gunGroup.position.lerpVectors(recoilStart, recoilTarget, back);
+      if (p < 1) requestAnimationFrame(recoil);
+      else {
+        muzzleFlash.intensity = 0;
+        ejectShell(gunGroup.position, target === 'self' ? 1 : -1);
+        pumpAction(onDone);
+      }
+    })(rt);
+  });
+}
+
+// ============================================================
+//  镜头震动
+// ============================================================
+let shakeAmount = 0;
+function shake(amount) { shakeAmount = Math.max(shakeAmount, amount); }
+function playerHitRecovery(done) {
+  const overlay = document.getElementById('defibOverlay');
+  state.busy = true;
+  overlay.classList.add('show');
+  SFX.defib();
+  tableShake = Math.max(tableShake, 0.12);
+  setTimeout(() => {
+    overlay.classList.remove('show');
+    state.busy = false;
+    done && done();
+  }, 1450);
+}
+
+// ============================================================
+//  交互：点击枪拿手上 → 瞄准（点对手=打对面 / 点下方=打自己）
+// ============================================================
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+// 检测射线是否命中某组物体
+function pick(clientX, clientY, obj) {
+  mouse.x = (clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObject(obj, true);
+  return hits.length > 0;
+}
+function pickGun(clientX, clientY) { return pick(clientX, clientY, gunGroup); }
+function pickAi(clientX, clientY) { return pick(clientX, clientY, aiGroup); }
+
+const aimHint = document.getElementById('aimHint');
+function showAimHint() { aimHint.classList.add('show'); }
+function hideAimHint() { aimHint.classList.remove('show'); }
+
+canvas.addEventListener('click', e => {
+  if (wasDrag(e)) return; // 拖动视角不算点击
+  // 玩家回合、非忙碌、还有子弹
+  if (state.phase !== 'yourTurn' || state.busy || totalCount() <= 0) return;
+
+  // 未持枪：点击桌子中央的枪 → 拿起来进入瞄准
+  if (!state.holdingGun) {
+    if (pickGun(e.clientX, e.clientY)) {
+      state.busy = true;
+      moveGunTo(GUN_POS.player, 400, () => {
+        state.busy = false;
+        state.holdingGun = true;
+        showAimHint();
+        SFX.pickGun();
+        toast('枪已到手 · 选择目标', 'gold');
+      });
+    }
+    return;
+  }
+
+  // 已持枪：点击对手 → 打对面；点击屏幕下方中间区域 → 打自己
+  if (pickAi(e.clientX, e.clientY)) {
+    shoot('enemy');
+  } else if (e.clientY > window.innerHeight * 0.62 && Math.abs(e.clientX - window.innerWidth / 2) < window.innerWidth * 0.35) {
+    // 屏幕下方靠中间 → 打自己
+    shoot('self');
+  }
+});
+
+// ============================================================
+//  渲染循环
+// ============================================================
+let t = 0;
+function animate() {
+  requestAnimationFrame(animate);
+  t += 0.016;
+  applyCamera();
+  if (tableShake > 0.001) {
+    tableShake *= 0.84;
+    tableGroup.position.x = (Math.random() - 0.5) * tableShake;
+    tableGroup.position.z = (Math.random() - 0.5) * tableShake;
+  } else {
+    tableShake = 0;
+    tableGroup.position.x = 0;
+    tableGroup.position.z = 0;
+  }
+  // 镜头震动衰减
+  if (shakeAmount > 0.001) {
+    const sx = (Math.random() - 0.5) * shakeAmount;
+    const sy = (Math.random() - 0.5) * shakeAmount;
+    camera.position.x += sx;
+    camera.position.y += sy;
+    shakeAmount *= 0.86;
+  } else {
+    shakeAmount = 0;
+  }
+  // 氛围动画
+  aiGroup.rotation.y = Math.sin(t * 0.8) * 0.05;
+  rim.intensity = 0.6 + Math.sin(t * 1.5) * 0.15;
+  key.intensity = 2.2 + Math.sin(t * 1.5) * 0.08;
+  redBack.intensity = 0.68 + Math.sin(t * 0.9) * 0.08;
+  if (aiHitAnim <= 0) {
+    const breath = 1 + Math.sin(t * 1.35) * 0.012;
+    aiGroup.scale.y = breath;
+  }
+
+  // AI 受击反馈：后仰 + 红光闪烁
+  if (aiHitAnim > 0) {
+    aiHitAnim = Math.max(0, aiHitAnim - 0.06);
+    const back = Math.sin((1 - aiHitAnim) * Math.PI); // 先剧烈后仰再回弹
+    aiGroup.rotation.x = -back * 0.5;   // 后仰
+    aiGroup.position.z = -2.6 + back * 0.25; // 向后顿一下
+    // 红光闪烁（受击时身体泛红）
+    const flash = Math.sin((1 - aiHitAnim) * Math.PI * 3);
+    if (flash > 0) {
+      aiBody.color.setHex(0x7a1512);
+      armMat.color.setHex(0x6a120f);
+    } else {
+      aiBody.color.setHex(0x1a1a20);
+      armMat.color.setHex(0x18181e);
+    }
+  } else {
+    aiGroup.rotation.x = 0;
+  }
+
+  // 手部跟随枪（玩家持枪时）
+  if (state.holdingGun) {
+    handGroup.visible = true;
+    handGroup.position.copy(gunGroup.position);
+    handGroup.rotation.copy(gunGroup.rotation);
+  } else {
+    handGroup.visible = false;
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ============================================================
+//  启动
+// ============================================================
+state.aiKnows = null;
+state.aiSaw = false;
+
+// 静音按钮
+const muteBtn = document.getElementById('muteBtn');
+muteBtn.addEventListener('click', () => {
+  soundOn = !soundOn;
+  muteBtn.textContent = soundOn ? '🔊' : '🔇';
+  muteBtn.classList.toggle('off', !soundOn);
+});
+
+document.getElementById('modeSelect').addEventListener('change', e => {
+  gameMode = e.target.value;
+  ITEM_POOL = gameMode === 'custom' ? CUSTOM_ITEM_POOL : CLASSIC_ITEM_POOL;
+  renderItems();
+});
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  ensureAudio();
+  document.getElementById('startPanel').style.display = 'none';
+  fullReset();
+  speak('taunt'); // 开局挑衅
+});
+document.getElementById('overBtn').addEventListener('click', () => {
+  if (state._final) fullReset();
+  else resetGame();
+});
+
+// 初始渲染
+state._final = false;
+renderHearts();
+renderItems();
+renderScore();
+applyCamera();
+</script>
+</body>
+</html>
